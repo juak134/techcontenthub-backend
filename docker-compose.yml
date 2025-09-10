@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-techcontent}
+      POSTGRES_USER: ${POSTGRES_USER:-techuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-techpass}
+    ports: ["5432:5432"]
+    volumes: [ "pgdata:/var/lib/postgresql/data" ]
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports: ["9200:9200"]
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  web:
+    build: .
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+    volumes: [ ".:/app" ]
+    env_file: [ ".env" ]
+    ports: ["8000:8000"]
+    depends_on: [ db, redis, elasticsearch ]
+
+  worker:
+    build: .
+    command: celery -A config worker -l info
+    volumes: [ ".:/app" ]
+    env_file: [ ".env" ]
+    depends_on: [ web, redis, db ]
+
+volumes:
+  pgdata:
